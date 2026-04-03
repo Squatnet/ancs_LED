@@ -400,12 +400,39 @@ ancs-portal/
 
 ## V2 JSON Command Protocol
 
-> **Status: draft.** V1 used plain ASCII CSV strings (`"type,value"`)
-> forwarded as raw bytes over I2C. V2 replaces these with JSON packets
-> throughout the network stack, with named fields replacing magic
-> integer type codes.
+> **Status: draft.**
 
-### Proposed envelope
+### Two-layer protocol — JSON front-end, compact wire format back-end
+
+JSON is used **only between the Pi and ETHhost**. ETHhost (Arduino
+Mega 2560) has enough flash and RAM to run ArduinoJSON and parse
+incoming packets comfortably.
+
+Everything downstream of ETHhost — I2C to the bridge, PJON on the
+long run, I2C on the client branches — continues to use the **compact
+integer wire format** from V1. This was a deliberate V1 design choice:
+client nodes (especially 328p-class boards) cannot afford the flash
+and RAM overhead of ArduinoJSON, and compact integer pairs keep
+packets small and parsing trivially fast with `atoi()`.
+
+```
+Pi  ──── JSON ────▶  ETHhost  ─── compact wire ───▶  IIC_2_PJON_Host
+    (named fields,            ("type,value" CSV)          │
+     ArduinoJSON)              ETHhost translates     PJON broadcast
+                          │
+                     PJON_2_IIC (×N)
+                          │
+                        I²C fanout
+                          │
+                      LED / Control clients
+                      (never see JSON)
+```
+
+Client firmware is unchanged in structure — the bridge layer is
+transparent to them. The only new firmware work on the client side
+is handling the new `text` and `sync` wire commands (see table below).
+
+### JSON envelope (Pi → ETHhost)
 
 ```json
 {
@@ -415,48 +442,56 @@ ancs-portal/
 }
 ```
 
-### Command reference (proposed)
+### Command reference
 
-| V1 type | V1 example | V2 command | V2 params |
+ETHhost maps each incoming JSON command to its compact wire equivalent
+before forwarding.
+
+| V2 JSON command | V2 params | Wire format (I2C/PJON) | Notes |
 |---|---|---|---|
-| `1` | `"1,64"` | `clock` | `{ "step": 64 }` |
-| `2` | `"2,0"` | `mode` | `{ "mode": "auto" \| "pulse" }` |
-| `5` | `"5,3"` | `palette` | `{ "index": 3 }` |
-| `6` | `"6,7"` | `fx` | `{ "index": 7 }` |
-| `7` | `"7,2"` | `pulseFx` | `{ "index": 2 }` |
-| `8` | `"8,15"` | `zone` | `{ "mask": 15 }` |
-| `10`–`17` | `"10"` | `pulse` | `{ "channel": 0 }` |
-| `20` | `"20,3"` | `hueSpeed` | `{ "value": 3 }` |
-| `21` | `"21,2"` | `runTime` | `{ "multiplier": 2 }` |
-| `23` | `"23,50"` | `fadeTime` | `{ "value": 50 }` |
-| _(new)_ | — | `text` | `{ "message": "Hello", "user": "@ancs" }` |
-| _(new)_ | — | `sync` | `{ "bpm": 120, "step": 0, "ts": 1743724800000 }` |
-| _(new)_ | — | `status` | _(client → master, response only)_ |
+| `clock` | `{ "step": 64 }` | `"1,64"` | |
+| `mode` | `{ "mode": "auto" }` | `"2,0"` | `auto`=0, `pulse`=1 |
+| `palette` | `{ "index": 3 }` | `"5,3"` | |
+| `fx` | `{ "index": 7 }` | `"6,7"` | |
+| `pulseFx` | `{ "index": 2 }` | `"7,2"` | |
+| `zone` | `{ "mask": 15 }` | `"8,15"` | |
+| `pulse` | `{ "channel": 0 }` | `"10"` | Channels 0–7 → types 10–17 |
+| `hueSpeed` | `{ "value": 3 }` | `"20,3"` | |
+| `runTime` | `{ "multiplier": 2 }` | `"21,2"` | |
+| `fadeTime` | `{ "value": 50 }` | `"23,50"` | |
+| `text` | `{ "message": "Hello", "user": "@ancs" }` | `"30,<len>,<chars>"` | New — matrix nodes only |
+| `sync` | `{ "bpm": 120, "step": 0, "ts": 1743724800000 }` | `"31,<bpm>,<step>"` | New — all clients |
+| `status` | _(none — client-initiated)_ | `"32,<type>,<val>"` | Upstream only |
+
+> **Text wire format note:** because the wire is ASCII CSV, the `text`
+> command will be sent as a length-prefixed byte sequence. The exact
+> framing (e.g. chunked with ACK, or single packet with length byte)
+> is TBD pending firmware prototyping — 328p SRAM limits (~2 KB) cap
+> maximum message length in a single I2C transaction.
 
 ### Text display
 
 The `text` command replaces the V1 hardcoded scroll string. The PWA
-sends free-form text (message, label, announcement) which the master
-forwards to any matrix node capable of scrolling. This replaces the
-old Twitter-to-LED pipeline — the display capability remains, with
-content now driven by the PWA instead of a social media feed.
+sends free-form text (message, label, announcement); ETHhost
+translates it to the compact wire form and forwards it to any matrix
+node capable of scrolling. This replaces the old Twitter-to-LED
+pipeline — the display capability remains, with content now driven
+by the PWA instead of a social media feed. Strip nodes (`LED328_STRIP`)
+ignore the `text` command.
 
-### How commands flow through the stack
+### Bidirectional flow
+
+Client status responses (e.g. `status`, tap-tempo events from control
+nodes) travel the reverse path using the same compact wire format:
 
 ```
-Pi  ──JSON──▶  ETHhost  ──I²C──▶  IIC_2_PJON_Host
-                                         │
-                                    PJON broadcast
-                                         │
-                              PJON_2_IIC (×N zones)
-                                         │
-                                    I²C fanout
-                                         │
-                               LED client nodes
+Client  ──wire──▶  PJON_2_IIC  ──PJON──▶  IIC_2_PJON_Host  ──I²C──▶  ETHhost
+                                │
+                              translate
+                              to JSON
+                                │
+                              ──JSON──▶  Pi PWA
 ```
-
-V2 bidirectional: client status responses travel the reverse path —
-I²C → PJON_2_IIC → PJON → IIC_2_PJON_Host → ETHhost → Pi PWA.
 
 ---
 
@@ -508,6 +543,7 @@ and clients drifted indefinitely with no correction mechanism.
 - 18 custom gradient palettes (ColorBrewer-derived)
 - WS2812B LED hardware throughout
 - I²C bridge topology (client boards stay I²C-only, no PJON overhead)
+- Compact integer wire format on I2C/PJON (client nodes never parse JSON)
 - All existing auto FX and pulse FX
 
 ---
