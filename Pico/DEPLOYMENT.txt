@@ -1,0 +1,13 @@
+Pico deployment files generated.
+
+Before upload:
+- Edit main.py and set SSID and PASSWORD.
+
+Upload these to your Pico W filesystem:
+- main.py
+- www/ (entire folder)
+
+Suggested commands (with mpremote):
+mpremote fs cp main.py :main.py
+mpremote fs cp -r www :www
+mpremote reset
