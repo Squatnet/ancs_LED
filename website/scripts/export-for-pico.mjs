@@ -1,5 +1,5 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const projectRoot = process.cwd();
 const distDir = join(projectRoot, 'dist');
@@ -7,7 +7,7 @@ const picoRoot = join(projectRoot, '..', 'Pico');
 const picoWwwDir = join(picoRoot, 'www');
 
 if (!existsSync(distDir)) {
-  console.error('Missing dist folder. Run `npm run build` first.');
+  console.error('ERROR: Missing dist folder. Run `npm run build` first.');
   process.exit(1);
 }
 
@@ -19,19 +19,24 @@ rmSync(picoWwwDir, { recursive: true, force: true });
 mkdirSync(picoWwwDir, { recursive: true });
 cpSync(distDir, picoWwwDir, { recursive: true });
 
-const hintPath = join(picoRoot, 'DEPLOYMENT.txt');
-const hint = [
-  'Pico deployment files generated.',
-  '',
-  'Upload these to your Pico W filesystem:',
-  '- main.py',
-  '- www/ (entire folder)',
-  '',
-  'Suggested commands (with mpremote):',
-  'mpremote fs cp main.py :main.py',
-  'mpremote fs cp -r www :www',
-].join('\n');
-writeFileSync(hintPath, hint + '\n', 'utf8');
-
 console.log('Export complete. Copied website/dist -> ../Pico/www');
-console.log('Next: upload ../Pico/main.py and ../Pico/www to Pico W.');
+console.log('');
+
+// Warn if wifi.json is missing
+const wifiConfig = join(picoRoot, 'wifi.json');
+if (!existsSync(wifiConfig)) {
+  console.log('NOTE: No wifi.json found in Pico/');
+  console.log('  Pico will boot in AP mode (SSID: ANCS, no password).');
+  console.log('  To use STA mode, copy Pico/wifi.json.example -> Pico/wifi.json');
+  console.log('  and fill in your credentials. (wifi.json is gitignored.)');
+  console.log('');
+}
+
+console.log('Next steps:');
+console.log('  mpremote fs cp Pico/main.py :main.py');
+console.log('  mpremote fs cp -r Pico/www :www');
+if (existsSync(wifiConfig)) {
+  console.log('  mpremote fs cp Pico/wifi.json :wifi.json');
+}
+console.log('  mpremote reset');
+

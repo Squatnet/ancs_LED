@@ -5,7 +5,7 @@
 	import { useGradientCoordinates } from "./use-gradient-coordinates.svelte";
 	import { useResizeObserver } from "./use-resize-observer.svelte";
 	let {
-		class: className,
+		class: className = "",
 		containerRef,
 		fromRef,
 		toRef,

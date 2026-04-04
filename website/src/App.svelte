@@ -22,7 +22,7 @@
     <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
   </div>
   <div class="animate-in fade-in zoom-in-95 slide-in-from-bottom-3 duration-500 rounded-xl border border-zinc-300/60 bg-white/80 px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100">
-    Tailwind + tw-animate-css is active ✅
+    Tailwind + tw-animate-css is THIS WORKS ✅
   </div>
 
   <TextAnimate

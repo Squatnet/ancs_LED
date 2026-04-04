@@ -238,7 +238,7 @@
 		segmentClass = "",
 		delay = 0,
 		duration = 0.3,
-		variants,
+		variants = undefined,
 		by = "word",
 		startOnView = true,
 		once = false,
