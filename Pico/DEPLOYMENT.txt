@@ -1,0 +1,36 @@
+ANCS Pico W — Deployment
+========================
+
+Boot behaviour
+--------------
+  STA mode  : Pico connects to Wi-Fi and serves the app over the LAN.
+  AP mode   : Pico broadcasts open Wi-Fi "ANCS" (no password, IP 192.168.4.1).
+              A DNS spoof server intercepts every hostname so the OS
+              "Sign in to network" sheet appears automatically and loads
+              the Svelte app — no URL needed. (even loading BBC.co.uk would show it)
+
+Configuring Wi-Fi (optional)
+-----------------------------
+Copy wifi.json.example → wifi.json and fill in your credentials:
+
+  {
+    "ssid": "YourNetwork",
+    "password": "YourPassword"
+  }
+
+If wifi.json is absent or credentials fail, the Pico falls back to AP mode.
+wifi.json is gitignored — never commit real credentials.
+
+Files to upload
+---------------
+  main.py           — server firmware (required)
+  www/              — built Svelte app (required)
+  wifi.json         — Wi-Fi credentials (optional, gitignored)
+
+Verify
+------
+  STA mode  : Pico prints  [STA] Connected, IP: <x.x.x.x>
+              Browse to http://<that IP>/ on the same network.
+  AP mode   : Pico prints  [AP] Broadcasting SSID: ANCS  IP: 192.168.4.1
+              Join "ANCS" Wi-Fi → OS sign-in sheet should appear automatically.
+              If not, browse to http://192.168.4.1/ manually.
